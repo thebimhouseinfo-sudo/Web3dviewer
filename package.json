@@ -1,0 +1,13 @@
+{
+  "name": "xreal-3d-viewer",
+  "version": "1.0.0",
+  "description": "XREAL 3D SBS Media Viewer",
+  "scripts": {
+    "bridge": "node bridge.js",
+    "serve": "npx serve .",
+    "start": "start cmd /k node bridge.js && npx serve ."
+  },
+  "dependencies": {
+    "node-hid": "^3.3.0"
+  }
+}

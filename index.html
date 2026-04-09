@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>XREAL 3D SBS Cinema</title>
+    <meta name="description" content="Xem và chuyển đổi ảnh/video sang 3D SBS cho kính Xreal Air 2.">
+    <link rel="stylesheet" href="style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
+</head>
+<body>
+<div id="app">
+
+    <!-- ==================== SPLASH SCREEN ==================== -->
+    <div id="splash-screen">
+        <div class="splash-bg"></div>
+
+        <header class="splash-header">
+            <div class="logo"><span class="neon-text">XREAL</span> 3D CINEMA</div>
+            <div class="header-right">
+                <div id="device-status" class="device-badge">
+                    <span class="status-dot"></span>
+                    <span id="status-text">Chưa kết nối kính</span>
+                </div>
+                <div id="res-badge" class="res-badge" title="Độ phân giải hiện tại">
+                    <span id="res-text">⬜ 2D</span>
+                </div>
+                <div id="bridge-badge" class="res-badge" title="Bridge chưa chạy">
+                    🔴 Bridge offline
+                </div>
+                <button id="btn-deep-scan" class="btn-pill btn-cyan">🔗 Kết nối kính</button>
+            </div>
+        </header>
+
+        <main class="splash-body">
+            <h1>Xem & Tạo nội dung <span class="neon-text">3D</span></h1>
+            <p class="splash-sub">Kết nối kính Xreal Air 2 và chọn một trong hai chế độ bên dưới</p>
+
+            <div class="mode-cards">
+                <!-- Card 1: Xem file SBS gốc -->
+                <div class="mode-card" id="card-native">
+                    <div class="card-icon">🎬</div>
+                    <div class="card-body">
+                        <h3>Xem file 3D SBS</h3>
+                        <p>Load trực tiếp ảnh hoặc video đã có định dạng 3D SBS</p>
+                        <label for="file-native" class="btn-pill btn-cyan" style="display:inline-block;margin-top:0.75rem;cursor:pointer;">
+                            Chọn file SBS
+                        </label>
+                        <input type="file" id="file-native" accept="video/*,image/*" hidden>
+                    </div>
+                </div>
+
+                <div class="card-or">HOẶC</div>
+
+                <!-- Card 2: Chuyển đổi 2D → 3D -->
+                <div class="mode-card" id="card-convert">
+                    <div class="card-icon">✨</div>
+                    <div class="card-body">
+                        <h3>Chuyển đổi 2D → 3D</h3>
+                        <p>Biến ảnh hoặc video thường thành 3D SBS bằng thuật toán Depth-Shift</p>
+                        <div class="convert-upload-row">
+                            <input type="file" id="media-upload" accept="image/*,video/*" hidden />
+                            <label class="btn-pill btn-ghost" for="media-upload" style="cursor:pointer;">🖼/🎥 Upload Media</label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="tips-row">
+                <div class="tip-card">💡 Nhấn <kbd>F</kbd> để bật Fullscreen khi xem</div>
+                <div class="tip-card">🥽 Nhấn nút <strong>2D/3D</strong> trên web để chuyển chế độ kính</div>
+                <div class="tip-card">⌨️ <kbd>Space</kbd> để tạm dừng video</div>
+            </div>
+        </main>
+    </div>
+
+    <!-- ==================== MEDIA VIEWER ==================== -->
+    <div id="media-viewport" class="hidden">
+
+        <!-- ★ Nút điều khiển góc trên phải — luôn hiển thị ★ -->
+        <div id="corner-controls">
+            <button id="btn-back" class="ctrl-btn">← Quay lại</button>
+            <div class="ctrl-sep"></div>
+            <button id="btn-toggle-3d" class="ctrl-btn mode-btn" title="Chuyển chế độ 3D / 2D (W)">
+                <span id="mode-label">2D MODE</span>
+            </button>
+            <button id="btn-fullscreen" class="ctrl-btn fs-btn" title="Toàn màn hình (F)">
+                <span id="fs-label">⛶ Full</span>
+            </button>
+        </div>
+
+        <!-- Chế độ xem file SBS gốc -->
+        <div id="native-view" class="view-layer hidden">
+            <video id="main-video" class="media-el" controls></video>
+            <img id="main-image" class="media-el hidden" alt="3D SBS Content">
+        </div>
+
+        <!-- Chế độ Convert 2D → 3D -->
+        <div id="convert-view" class="view-layer hidden">
+
+            <!-- 2D Preview (hiển thị khi chưa bật 3D) -->
+            <div id="preview-layer">
+                <video id="preview-video" class="media-el" controls></video>
+                <img id="preview-image" class="media-el hidden" alt="Preview">
+                <div id="preview-hint">
+                    <span>🥽</span>
+                    <p>Nhấn nút <strong>3D SBS</strong> ở góc trên phải để bật chế độ 3D</p>
+                </div>
+            </div>
+
+            <!-- SBS Canvas (chỉ hiển thị khi bật 3D) -->
+            <div id="canvas-wrap" class="hidden">
+                <canvas id="sbs-canvas"></canvas>
+                <div id="play-overlay" class="hidden">▶</div>
+                <div id="processing-badge" class="hidden">⏳ Đang xử lý...</div>
+            </div>
+
+            <!-- Panel điều chỉnh depth -->
+            <div id="controls-panel" class="hidden">
+                <div class="panel-row" style="margin-bottom: 0.8rem;">
+                    <!-- Nút upload nhanh dùng class btn-panel-cyan để rõ ràng -->
+                    <label for="media-upload" class="btn-panel btn-panel-cyan" style="display:block; text-align:center; cursor:pointer;">
+                        🖼/🎥 Tải tệp mới lên
+                    </label>
+                </div>
+                <div class="panel-title">⚙ Điều chỉnh 3D</div>
+                <div class="panel-row">
+                    <label>Depth <span id="val-depth">30</span></label>
+                    <input type="range" id="sl-depth" min="0" max="100" step="1" value="30">
+                </div>
+                <div class="panel-row">
+                    <label>Zoom <span id="val-zoom">1.00</span>x</label>
+                    <input type="range" id="sl-zoom" min="1" max="2" step="0.01" value="1">
+                </div>
+                <div class="panel-row">
+                    <label>H-Shift <span id="val-h">0</span></label>
+                    <input type="range" id="sl-h" min="-300" max="300" step="1" value="0">
+                </div>
+                <div class="panel-row">
+                    <label>V-Shift <span id="val-v">0</span></label>
+                    <input type="range" id="sl-v" min="-200" max="200" step="1" value="0">
+                </div>
+                <div class="panel-row">
+                    <label style="justify-content:space-between">
+                        Đảo depth map
+                        <input type="checkbox" id="cb-invert">
+                    </label>
+                </div>
+                <div class="panel-actions">
+                    <button id="btn-reset-view" class="btn-panel">🔄 Reset</button>
+                    <button id="btn-download-sbs" class="btn-panel btn-panel-cyan">⬇ Tải PNG SBS</button>
+                </div>
+            </div>
+
+            <button id="btn-toggle-panel" class="ctrl-btn" title="Hiện/Ẩn điều chỉnh">⚙ Điều chỉnh</button>
+        </div>
+
+        <!-- Toast thông báo -->
+        <div id="toast" class="toast hidden"></div>
+    </div>
+
+</div>
+<script src="app.js"></script>
+</body>
+</html>
