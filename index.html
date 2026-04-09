@@ -38,32 +38,17 @@
             <h1>Xem & Tạo nội dung <span class="neon-text">3D</span></h1>
             <p class="splash-sub">Kết nối kính Xreal Air 2 và chọn một trong hai chế độ bên dưới</p>
 
-            <div class="mode-cards">
-                <!-- Card 1: Xem file SBS gốc -->
-                <div class="mode-card" id="card-native">
-                    <div class="card-icon">🎬</div>
+            <div class="mode-cards" style="justify-content: center;">
+                <div class="mode-card" style="width: 100%; max-width: 500px; text-align: center;">
+                    <div class="card-icon" style="font-size: 3rem; margin-bottom: 0.5rem">📁</div>
                     <div class="card-body">
-                        <h3>Xem file 3D SBS</h3>
-                        <p>Load trực tiếp ảnh hoặc video đã có định dạng 3D SBS</p>
-                        <label for="file-native" class="btn-pill btn-cyan" style="display:inline-block;margin-top:0.75rem;cursor:pointer;">
-                            Chọn file SBS
+                        <h3>Mở Tệp (Ảnh / Video)</h3>
+                        <p style="margin-top: 0.5rem;">Sau khi tải lên, ứng dụng sẽ <b>tự động</b>:
+                        <br/>- Phát bằng chế độ <b>3D SBS gốc</b> nếu tên tệp có từ <i>"sbs" / "3d"</i>, hoặc <b>tỉ lệ khung hình</b> là siêu rộng (Full SBS).<br/>- Bật chế độ <b>Chuyển đổi 2D sang 3D</b> đối với các tệp thông thường.</p>
+                        <label for="unified-upload" class="btn-pill btn-cyan" style="display:inline-block;margin-top:1.5rem;cursor:pointer;font-size:1.1rem;padding:0.8rem 2.5rem;">
+                            Tải Tệp Lên
                         </label>
-                        <input type="file" id="file-native" accept="video/*,image/*" hidden>
-                    </div>
-                </div>
-
-                <div class="card-or">HOẶC</div>
-
-                <!-- Card 2: Chuyển đổi 2D → 3D -->
-                <div class="mode-card" id="card-convert">
-                    <div class="card-icon">✨</div>
-                    <div class="card-body">
-                        <h3>Chuyển đổi 2D → 3D</h3>
-                        <p>Biến ảnh hoặc video thường thành 3D SBS bằng thuật toán Depth-Shift</p>
-                        <div class="convert-upload-row">
-                            <input type="file" id="media-upload" accept="image/*,video/*" hidden />
-                            <label class="btn-pill btn-ghost" for="media-upload" style="cursor:pointer;">🖼/🎥 Upload Media</label>
-                        </div>
+                        <input type="file" id="unified-upload" accept="video/*,image/*" hidden>
                     </div>
                 </div>
             </div>
@@ -93,7 +78,7 @@
 
         <!-- Chế độ xem file SBS gốc -->
         <div id="native-view" class="view-layer hidden">
-            <video id="main-video" class="media-el" controls></video>
+            <video id="main-video" class="media-el"></video>
             <img id="main-image" class="media-el hidden" alt="3D SBS Content">
         </div>
 
@@ -102,7 +87,7 @@
 
             <!-- 2D Preview (hiển thị khi chưa bật 3D) -->
             <div id="preview-layer">
-                <video id="preview-video" class="media-el" controls></video>
+                <video id="preview-video" class="media-el"></video>
                 <img id="preview-image" class="media-el hidden" alt="Preview">
                 <div id="preview-hint">
                     <span>🥽</span>
@@ -121,7 +106,7 @@
             <div id="controls-panel" class="hidden">
                 <div class="panel-row" style="margin-bottom: 0.8rem;">
                     <!-- Nút upload nhanh dùng class btn-panel-cyan để rõ ràng -->
-                    <label for="media-upload" class="btn-panel btn-panel-cyan" style="display:block; text-align:center; cursor:pointer;">
+                    <label for="unified-upload" class="btn-panel btn-panel-cyan" style="display:block; text-align:center; cursor:pointer;">
                         🖼/🎥 Tải tệp mới lên
                     </label>
                 </div>
@@ -155,6 +140,15 @@
             </div>
 
             <button id="btn-toggle-panel" class="ctrl-btn" title="Hiện/Ẩn điều chỉnh">⚙ Điều chỉnh</button>
+        </div>
+
+        <!-- Custom Video Controls -->
+        <div id="video-controls" class="hidden">
+            <button id="vctrl-play" class="ctrl-btn" style="font-size:1.2rem; min-width:35px; padding-left:0; padding-right:0; justify-content:center;">⏸</button>
+            <input type="range" id="vctrl-seek" min="0" max="100" value="0" step="0.1">
+            <span id="vctrl-time">0:00 / 0:00</span>
+            <span style="font-size: 1.1rem; margin-left:0.5rem;">🔊</span>
+            <input type="range" id="vctrl-vol" min="0" max="1" value="1" step="0.05" style="width: 70px;">
         </div>
 
         <!-- Toast thông báo -->

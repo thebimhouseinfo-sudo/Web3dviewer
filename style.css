@@ -375,13 +375,7 @@ kbd {
 }
 #controls-panel.hidden { opacity: 0; pointer-events: none; transform: translateX(-50%) translateY(10px); }
 
-/* --- KIỂU DÁNG CHO BẢNG ĐIỀU KHIỂN SBS (TÁCH ĐÔI MÀN HÌNH) --- */
-body.sbs-active #controls-panel {
-    left: 25%; /* Nằm chính giữa mắt trái */
-}
-body.sbs-active #controls-panel-clone {
-    left: 75%; /* Nằm chính giữa mắt phải */
-}
+/* --- BẢNG ĐIỀU KHIỂN (Đã bỏ nhân đôi màn hình vì chuột 2D hệ điều hành gây lác mắt) --- */
 
 .panel-row {
     margin-bottom: 0.6rem;
@@ -523,3 +517,29 @@ input[type=checkbox] {
    UTILITY
    ============================================================ */
 .hidden { display: none !important; }
+
+/* --- Video Controls --- */
+#video-controls {
+    position: absolute;
+    bottom: 2rem;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(6,6,14,0.92);
+    border: 1px solid var(--border);
+    backdrop-filter: blur(20px);
+    border-radius: 99px;
+    padding: 0.6rem 1.2rem;
+    display: flex;
+    align-items: center;
+    gap: 0.8rem;
+    z-index: 400;
+    box-shadow: 0 8px 30px rgba(0,0,0,0.6);
+    transition: opacity 0.25s, transform 0.25s, left 0.3s;
+}
+#video-controls.hidden { opacity: 0; pointer-events: none; transform: translateX(-50%) translateY(10px); }
+
+/* Đã bỏ nhân đôi video controls */
+#vctrl-seek { width: 280px; }
+@media (max-width: 600px) { #vctrl-seek { width: 150px; } }
+
+#vctrl-time { font-size: 0.8rem; color: var(--text-dim); font-variant-numeric: tabular-nums; min-width: 75px; text-align: center; }

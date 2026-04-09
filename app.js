@@ -94,8 +94,9 @@ const MCU = {
 // Bridge Client — gọi Node.js HID bridge (giải pháp chắc chắn)
 // ============================================================
 const Bridge = {
-    URL:         'http://localhost:8765',
+    URL:         'http://127.0.0.1:8765',
     isAvailable: false,
+    deviceFound: false,
     _lastCheck:  0,
     RECHECK_MS:  5000,
 
@@ -107,10 +108,15 @@ const Bridge = {
             const r = await fetch(`${this.URL}/status`, { signal: AbortSignal.timeout(800) });
             const j = await r.json();
             this.isAvailable = j.ok === true;
+            this.deviceFound = j.deviceFound === true;
         } catch(_) {
             this.isAvailable = false;
+            this.deviceFound = false;
         }
         this._updateBadge();
+        if (window._app && window._app.xreal) {
+            window._app.xreal._updateBadge();
+        }
         return this.isAvailable;
     },
 
@@ -207,9 +213,21 @@ class XrealController {
     }
 
     _updateBadge() {
+        // Priority 1: Bridge is connected and has locked the glasses
+        if (Bridge.isAvailable && Bridge.deviceFound) {
+            this.$badge.classList.add('connected');
+            this.$statusTxt.textContent = 'Kính đã kết nối (Bridge)';
+            const btn = document.getElementById('btn-deep-scan');
+            if (btn) btn.style.display = 'none'; // Hide WebHID button to prevent lock conflicts
+            return;
+        }
+
+        // Priority 2: WebHID is connected
         const ok = this.devices.length > 0;
         this.$badge.classList.toggle('connected', ok);
-        this.$statusTxt.textContent = ok ? (this.devices[0].productName || 'Kính đã kết nối') : 'Chưa kết nối kính';
+        this.$statusTxt.textContent = ok ? (this.devices[0].productName || 'Kính đã kết nối (WebHID)') : 'Chưa kết nối kính';
+        const btn = document.getElementById('btn-deep-scan');
+        if (btn) btn.style.display = ok ? 'none' : 'inline-block';
     }
 
     /**
@@ -232,18 +250,20 @@ class XrealController {
         let lastDetected = null; // debounce: chỉ fire khi phát hiện 2 lần liên tiếp
 
         const check = () => {
-            const w = window.screen.width;
-            const h = window.screen.height;
+            // Lấy DPR để tính đúng pixel vật lý, phòng khi Windows bật Scale 125% - 150%
+            const dpr = window.devicePixelRatio || 1;
+            const w = Math.round(window.screen.width * dpr);
+            const h = Math.round(window.screen.height * dpr);
 
             // Cập nhật badge độ phân giải (luôn cập nhật kể cả không thay đổi chế độ)
-            const key = `${w}×${h}`;
+            const key = `${w}×${h} (DPR: ${dpr.toFixed(2)})`;
             if (key !== this._lastRes.key) {
                 this._lastRes = { w, h, key };
                 this._updateResBadge(w, h);
             }
 
             // Kính Air 2 ở chế độ 3D: 3840×1080
-            const detected3D = (w >= 3800 && h <= 1110);
+            const detected3D = (w >= 3800 && h <= 1200);
 
             // Debounce: chỉ xử lý khi phát hiện trạng thái nhất quán qua 2 lần check
             if (detected3D !== lastDetected) {
@@ -281,8 +301,8 @@ class XrealController {
     // ----------------------------------------------------------
     // Toggle từ nút thủ công — thử bridge trước, fallback WebHID
     // ----------------------------------------------------------
-    async manualToggle3D() {
-        const target = !this.websiteIs3D;
+    async manualToggle3D(forceState = null) {
+        const target = forceState !== null ? forceState : !this.websiteIs3D;
         this.websiteIs3D = target;
 
         // ① Thử bridge (Node.js native HID — chắc chắn nhất)
@@ -368,9 +388,10 @@ class SBSConverter {
             a.href = this.canvas.toDataURL('image/png'); a.click();
         });
         document.getElementById('btn-reset-view').addEventListener('click', () => this.reset());
-        document.getElementById('btn-toggle-panel').addEventListener('click', () =>
-            document.getElementById('controls-panel').classList.toggle('hidden')
-        );
+        document.getElementById('btn-toggle-panel').addEventListener('click', () => {
+            const p = document.getElementById('controls-panel');
+            p.classList.toggle('hidden');
+        });
     }
 
     _updateLabels() {
@@ -378,24 +399,6 @@ class SBSConverter {
         document.getElementById('val-zoom').textContent  = parseFloat(this.$zoom.value).toFixed(2);
         document.getElementById('val-h').textContent     = this.$h.value;
         document.getElementById('val-v').textContent     = this.$v.value;
-
-        // Nếu có bản sao UI (đang bật SBS), đồng bộ dữ liệu hiển thị (kể cả slider thumb)
-        if (this.sbsActive) {
-            const cloneD = document.getElementById('val-depth-clone');
-            if (cloneD) {
-                cloneD.textContent = this.$depth.value;
-                document.getElementById('val-zoom-clone').textContent = parseFloat(this.$zoom.value).toFixed(2);
-                document.getElementById('val-h-clone').textContent = this.$h.value;
-                document.getElementById('val-v-clone').textContent = this.$v.value;
-                
-                // Đồng bộ giá trị của <input type="range"> (cho visual thumb)
-                document.getElementById('sl-depth-clone').value = this.$depth.value;
-                document.getElementById('sl-zoom-clone').value = this.$zoom.value;
-                document.getElementById('sl-h-clone').value = this.$h.value;
-                document.getElementById('sl-v-clone').value = this.$v.value;
-                document.getElementById('cb-invert-clone').checked = this.$invert.checked;
-            }
-        }
     }
 
     _getFit(srcW, srcH) {
@@ -451,39 +454,20 @@ class SBSConverter {
         document.body.classList.toggle('sbs-active', active);
         document.getElementById('preview-layer').classList.toggle('hidden',  active);
         document.getElementById('canvas-wrap').classList.toggle('hidden',   !active);
-        
-        const cPanel = document.getElementById('controls-panel');
-        let clone = document.getElementById('controls-panel-clone');
 
         if (active) {
-            // Hiển thị panel và chuẩn bị clone cho chế độ SBS
-            cPanel.classList.remove('hidden');
-            
-            if (!clone) {
-                clone = cPanel.cloneNode(true);
-                clone.id = 'controls-panel-clone';
-                clone.style.pointerEvents = 'none'; // Chỉ để nhìn, không click được
-                // Cập nhật lại ID trong clone để không bị trùng (và dễ lấy)
-                clone.querySelectorAll('[id]').forEach(el => {
-                    el.id = el.id + '-clone';
-                });
-                cPanel.parentNode.appendChild(clone);
-            }
-            clone.classList.remove('hidden');
-            this._updateLabels(); // Đồng bộ dữ liệu sang clone
+            this._updateLabels(); 
 
             if (this.loaded) {
                 if (this.sourceType === 'video') {
-                    document.getElementById('play-overlay').style.display = 'flex';
+                    const overlay = document.getElementById('play-overlay');
+                    if (overlay && this.vidEl.paused) overlay.style.display = 'flex';
                 } else {
                     this._drawSBS();
                 }
             }
         } else {
             // Tắt chế độ SBS
-            cPanel.classList.remove('hidden'); // Trong màn hình Native 2D vẫn hiện control (hoặc ẩn tuỳ thiết kế, ở đây tạm ẩn)
-            if (clone) clone.classList.add('hidden');
-            
             this._looping = false;
             if (this.vidEl) this.vidEl.pause();
         }
@@ -566,20 +550,32 @@ class App {
         this.$image    = document.getElementById('main-image');
         this.mode = null;
 
+        // Custom Video Controls
+        this.$vControls = document.getElementById('video-controls');
+        this.$vPlay = document.getElementById('vctrl-play');
+        this.$vSeek = document.getElementById('vctrl-seek');
+        this.$vTime = document.getElementById('vctrl-time');
+        this.$vVol  = document.getElementById('vctrl-vol');
+        this._activeVid = null;
+
+        if (this.$vPlay) {
+            this.$vPlay.addEventListener('click', () => this.togglePlay());
+            this.$vSeek.addEventListener('input', e => this.seek(e.target.value));
+            this.$vVol.addEventListener('input', e => this.setVolume(e.target.value));
+        }
+
         this._initEvents();
     }
 
     _initEvents() {
-        document.getElementById('file-native').addEventListener('change', e => {
-            const f = e.target.files[0]; if (f) this._openNative(f);
-        });
-        document.getElementById('media-upload').addEventListener('change', e => {
-            const f = e.target.files[0]; 
-            if (f) {
-                const type = f.type.startsWith('video/') ? 'video' : 'image';
-                this._openConvert(f, type);
-            }
-        });
+        const elUpload = document.getElementById('unified-upload');
+        if (elUpload) {
+            elUpload.addEventListener('change', e => {
+                const f = e.target.files[0]; 
+                if (f) this._handleMediaUpload(f);
+                elUpload.value = ''; // Cho phép chọn lại cùng 1 file
+            });
+        }
 
         // ★ Nút toggle 3D thủ công (luôn hiển thị góc trên phải)
         document.getElementById('btn-toggle-3d').addEventListener('click', async () => {
@@ -600,26 +596,70 @@ class App {
             if (k === 'escape' && !document.fullscreenElement) this._goBack();
             if (k === ' ') {
                 e.preventDefault();
-                if (this.mode === 'native')  { this.$video.paused ? this.$video.play() : this.$video.pause(); }
-                if (this.mode === 'convert') { this.converter._togglePlay(); }
+                this.togglePlay();
             }
         });
 
         document.addEventListener('fullscreenchange', () => {
             const fs = !!document.fullscreenElement;
             document.getElementById('fs-label').textContent = fs ? '⊡ Thu nhỏ' : '⛶ Full';
+            
+            // Nếu người dùng thoát Fullscreen mà đang ở chế độ 3D -> ép về 2D
+            if (!fs && (this.xreal.websiteIs3D || this.xreal.glassesIs3D)) {
+                this.xreal.manualToggle3D(false);
+                this._apply3DMode(false);
+                showToast('🖥️ Đã thoát 3D vì bạn rời Toàn màn hình');
+            }
         });
 
         // Drag & drop
         document.getElementById('splash-screen').addEventListener('dragover', e => e.preventDefault());
         document.getElementById('splash-screen').addEventListener('drop', e => {
             e.preventDefault();
-            const f = e.dataTransfer.files[0]; if (!f) return;
-            const name = f.name.toLowerCase();
-            (name.includes('sbs') || name.includes('3d') || name.includes('hsbs'))
-                ? this._openNative(f)
-                : this._openConvert(f, f.type.startsWith('image/') ? 'image' : 'video');
+            const f = e.dataTransfer.files[0];
+            if (f) this._handleMediaUpload(f);
         });
+    }
+
+    _handleMediaUpload(f) {
+        const finalizeOpen = (file, isSBS) => {
+            if (isSBS) {
+                this._openNative(file);
+            } else {
+                const type = file.type.startsWith('video/') ? 'video' : 'image';
+                this._openConvert(file, type);
+            }
+        };
+
+        const name = f.name.toLowerCase();
+        // 1. Phân loại theo tên file (quan trọng cho video Half-SBS có tỉ lệ 16:9 nhưng bị ép ngang)
+        if (name.includes('sbs') || name.includes('3d') || name.includes('hsbs')) {
+            return finalizeOpen(f, true);
+        }
+
+        // 2. Không có tên rõ ràng -> Tính tỉ lệ kích thước hiển thị thật (Aspect Ratio)
+        // Hình ảnh 16:9 bình thường là 1.77. 
+        // Hình ảnh 32:9 Full SBS (3840x1080) là 3.55. >2.2 là đủ an toàn.
+        const url = URL.createObjectURL(f);
+        if (f.type.startsWith('image/')) {
+            const img = new Image();
+            img.onload = () => {
+                const ratio = img.width / img.height;
+                URL.revokeObjectURL(url);
+                finalizeOpen(f, ratio > 2.2);
+            };
+            img.src = url;
+        } else if (f.type.startsWith('video/')) {
+            const vid = document.createElement('video');
+            vid.onloadedmetadata = () => {
+                const ratio = vid.videoWidth / vid.videoHeight;
+                URL.revokeObjectURL(url);
+                finalizeOpen(f, ratio > 2.2);
+            };
+            vid.src = url;
+        } else {
+            finalizeOpen(f, false);
+        }
     }
 
     _openNative(file) {
@@ -630,7 +670,14 @@ class App {
         this.$image.src = isImg ? url : ''; this.$video.src = isImg ? '' : url;
         this.$image.classList.toggle('hidden',  !isImg);
         this.$video.classList.toggle('hidden',  isImg);
-        if (!isImg) this.$video.play();
+        
+        if (!isImg) {
+            this._bindVideo(this.$video);
+            this.$video.play();
+        } else {
+            this._bindVideo(null);
+        }
+        
         // Không reset mode — khởi đầu với layout phù hợp trạng thái hiện tại
         const currentIs3D = this.xreal.glassesIs3D || this.xreal.websiteIs3D;
         this._apply3DMode(currentIs3D);
@@ -640,7 +687,13 @@ class App {
     _openConvert(file, type) {
         this.mode = 'convert';
         this._showViewer('convert');
-        type === 'image' ? this.converter.loadImage(file) : this.converter.loadVideo(file);
+        if (type === 'image') {
+            this.converter.loadImage(file);
+            this._bindVideo(null);
+        } else {
+            this.converter.loadVideo(file);
+            this._bindVideo(this.converter.vidEl);
+        }
         const currentIs3D = this.xreal.glassesIs3D || this.xreal.websiteIs3D;
         this.converter.setSBSMode(currentIs3D);
         this._apply3DMode(currentIs3D);
@@ -664,9 +717,17 @@ class App {
 
     _toggleFS() {
         if (!document.fullscreenElement) {
-            this.$viewport.requestFullscreen().catch(() => document.documentElement.requestFullscreen());
+            this._enterFS();
         } else {
             document.exitFullscreen();
+        }
+    }
+
+    _enterFS() {
+        if (!document.fullscreenElement) {
+            this.$viewport.requestFullscreen().catch(() => {
+                document.documentElement.requestFullscreen().catch(() => {});
+            });
         }
     }
 
@@ -679,9 +740,88 @@ class App {
         this.converter.vidEl.pause(); this.converter._looping = false;
         this.converter.loaded = false;
         this.converter.setSBSMode(false);
-        // Giữ trạng thái 3D của kính (không tắt)
+        
+        // Tắt chế độ 3D tự động khi quay lại / nhấn ESC
+        if (this.xreal.websiteIs3D || this.xreal.glassesIs3D) {
+            this.xreal.manualToggle3D(false);
+            this._apply3DMode(false);
+        }
+        
+        this._bindVideo(null); // Tắt controls
         this.mode = null;
-        ['file-native','file-img-2d','file-vid-2d'].forEach(id => { document.getElementById(id).value = ''; });
+        const upEl = document.getElementById('unified-upload');
+        if (upEl) upEl.value = '';
+    }
+
+    // --- Custom Video Controls Logic ---
+
+    _bindVideo(video) {
+        if (this._activeVid) {
+            this._activeVid.removeEventListener('timeupdate', this._onTimeUpdate);
+            this._activeVid.removeEventListener('play', this._onPlayState);
+            this._activeVid.removeEventListener('pause', this._onPlayState);
+            this._activeVid.removeEventListener('loadedmetadata', this._onTimeUpdate);
+        }
+        this._activeVid = video;
+        if (video) {
+            this._onTimeUpdate = () => this._updateVideoUI();
+            this._onPlayState = () => this._updateVideoUI();
+            video.addEventListener('timeupdate', this._onTimeUpdate);
+            video.addEventListener('play', this._onPlayState);
+            video.addEventListener('pause', this._onPlayState);
+            video.addEventListener('loadedmetadata', this._onTimeUpdate);
+            
+            if (this.$vVol) this.$vVol.value = video.volume;
+            if (this.$vControls) this.$vControls.classList.remove('hidden');
+        } else {
+            if (this.$vControls) this.$vControls.classList.add('hidden');
+        }
+    }
+
+    _updateVideoUI() {
+        if (!this._activeVid) return;
+        const V = this._activeVid;
+        if (this.$vPlay) this.$vPlay.textContent = V.paused ? '▶' : '⏸';
+        if (V.duration && this.$vSeek) {
+            this.$vSeek.value = (V.currentTime / V.duration) * 100;
+            if (this.$vTime) {
+                this.$vTime.textContent = this._fmtTime(V.currentTime) + ' / ' + this._fmtTime(V.duration);
+            }
+        }
+    }
+
+    _fmtTime(secs) {
+        if (isNaN(secs)) return "0:00";
+        const m = Math.floor(secs / 60);
+        const s = Math.floor(secs % 60);
+        return m + ':' + (s < 10 ? '0' : '') + s;
+    }
+
+    togglePlay() {
+        if (this.mode === 'native') {
+            if (!this._activeVid) return;
+            this._activeVid.paused ? this._activeVid.play() : this._activeVid.pause();
+        } else if (this.mode === 'convert') {
+            this.converter._togglePlay();
+        }
+    }
+
+    seek(val) {
+        if (!this._activeVid || !this._activeVid.duration) return;
+        const targetTime = (val / 100) * this._activeVid.duration;
+        this._activeVid.currentTime = targetTime;
+        if (this.mode === 'convert') {
+            this.converter.$prevVideo.currentTime = targetTime;
+            this.converter._drawSBS();
+        }
+    }
+
+    setVolume(val) {
+        if (!this._activeVid) return;
+        this._activeVid.volume = val;
+        if (this.mode === 'convert') {
+            this.converter.$prevVideo.volume = val;
+        }
     }
 }
 
